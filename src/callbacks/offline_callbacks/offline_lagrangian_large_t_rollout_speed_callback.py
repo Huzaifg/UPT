@@ -74,7 +74,7 @@ class OfflineLagrangianLargeTRolloutSpeedCallback(PeriodicCallback):
 
         # rollout
         with trainer.autocast_context:
-            vel_pred = model.rollout_large_t_timing(
+            vel_pred = model.rollout_large_t(
                 x=x,
                 all_pos=all_pos,
                 timestep=timestep,

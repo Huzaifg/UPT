@@ -116,6 +116,12 @@ trainer:
       batch_size: 128
       rollout_kwargs:
         save_rollout: false
+    - kind: offline_lagrangian_large_t_rollout_speed_callback
+      every_n_epochs: 1
+      dataset_key: test_rollout
+      batch_size: 128
+      rollout_kwargs:
+        save_rollout: false
     - kind: best_checkpoint_callback
       every_n_epochs: 1
       metric_key: ekin/valid_rollout/mse
