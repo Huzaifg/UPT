@@ -25,6 +25,7 @@ from utils.factory import create
 from utils.data_container import DataContainer
 
 from utils.version_check import check_versions
+import time
 
 
 if __name__ == "__main__":
@@ -134,6 +135,8 @@ if __name__ == "__main__":
     initializer.init_weights(model.conditioner)
 
 
+
+
     # =============================================================================
     # Evalaute model
     # =============================================================================
@@ -146,7 +149,7 @@ if __name__ == "__main__":
     data_loader = trainer.data_container.get_data_loader(
             main_sampler=main_sampler,
             main_collator=main_collator,
-            batch_size=100,
+            batch_size=1,
             epochs=1,
             updates=None,
             samples=None,
@@ -164,6 +167,7 @@ if __name__ == "__main__":
     # # all positions of the sequence are needed for decoding
     all_pos = ModeWrapper.get_item(mode=trainer.dataset_mode, item="all_pos", batch=batch)
     all_pos = all_pos.to(model.device, non_blocking=True)
+
     # # all velocities are needed to compare the predictions
     all_vel = ModeWrapper.get_item(mode=trainer.dataset_mode, item="all_vel", batch=batch)
     all_vel = all_vel.to(model.device, non_blocking=True)
@@ -177,7 +181,6 @@ if __name__ == "__main__":
     edge_index = ModeWrapper.get_item(mode=trainer.dataset_mode, item="edge_index", batch=batch)
     edge_index = edge_index.to(model.device, non_blocking=True)
     batch_idx = ctx["batch_idx"].to(model.device, non_blocking=True)
-
     # inputs are the velocities of all timesteps
     x = einops.rearrange(
         x,
@@ -186,8 +189,9 @@ if __name__ == "__main__":
 
     unbatch_idx = ctx["unbatch_idx"].to(model.device, non_blocking=True)
     unbatch_select = ctx["unbatch_select"].to(model.device, non_blocking=True)
-
     print(f"Batch ready")
+
+    start_time = time.time()
 
     with trainer.autocast_context:
         vel_pred = model.rollout_large_t(
@@ -199,6 +203,32 @@ if __name__ == "__main__":
             unbatch_idx=unbatch_idx,
             unbatch_select=unbatch_select
         )
+
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Execution time: {execution_time} seconds")
+    # Un-normalize the velocities
+    vel_pred = trainer.data_container.get_dataset().unnormalize_vel(vel_pred)
+    vel_pred = vel_pred
+    all_vel = einops.rearrange(
+            all_vel,
+            "bs time n_particles dim -> (bs n_particles) time dim"
+        )
+    all_vel = trainer.data_container.get_dataset().unnormalize_vel(all_vel)
+    all_vel = all_vel
+
+    
+    # Select every other velocity
+    # vel_pred = vel_pred[:,::2,:]
+    
+    # # Append the first two velocities from the dataset
+    # print(vel_pred[10,0:10,0])
+    # print(all_vel[10,0:10,0])
+
+
+
+    
+
 
 
 
