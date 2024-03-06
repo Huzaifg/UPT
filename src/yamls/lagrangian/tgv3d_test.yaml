@@ -32,6 +32,7 @@ datasets:
     split: test
     test_mode: full_traj
     n_input_timesteps: ${vars.dataset.n_input_timesteps}
+    n_pushforward_timesteps: ${vars.dataset.n_pushforward_timesteps}
     graph_mode: ${vars.dataset.graph_mode}
     radius_graph_r: ${vars.dataset.radius_graph_r}
     radius_graph_max_num_neighbors: ${vars.dataset.radius_graph_max_num_neighbors}
