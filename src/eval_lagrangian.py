@@ -149,7 +149,7 @@ if __name__ == "__main__":
     data_loader = trainer.data_container.get_data_loader(
             main_sampler=main_sampler,
             main_collator=main_collator,
-            batch_size=1,
+            batch_size=100,
             epochs=1,
             updates=None,
             samples=None,
@@ -207,23 +207,41 @@ if __name__ == "__main__":
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Execution time: {execution_time} seconds")
-    # Un-normalize the velocities
-    vel_pred = trainer.data_container.get_dataset().unnormalize_vel(vel_pred)
-    vel_pred = vel_pred
+
+    # Since these are the ones that are computed in the model
+    time_indicies = torch.tensor([10, 11, 20, 21, 30, 31, 40, 41, 50, 51])
+
+    # Directly from offline_lagrangian_large_t_rollout_mesh_loss_callback
     all_vel = einops.rearrange(
             all_vel,
             "bs time n_particles dim -> (bs n_particles) time dim"
         )
+    all_vel = all_vel[:,time_indicies,:]
+
+    # Un-normalize the velocities
+    vel_pred = trainer.data_container.get_dataset().unnormalize_vel(vel_pred)
+    vel_pred = vel_pred
+
     all_vel = trainer.data_container.get_dataset().unnormalize_vel(all_vel)
     all_vel = all_vel
+        # Unbatch
+    all_vel = einops.rearrange(
+        all_vel,
+        "(bs n_particles) time dim -> bs n_particles time dim",
+        bs=len(unbatch_select)
+    )
+    vel_pred = einops.rearrange(
+        vel_pred,
+        "(bs n_particles) time dim -> bs n_particles time dim",
+        bs=len(unbatch_select)
+    )
 
     
-    # Select every other velocity
-    # vel_pred = vel_pred[:,::2,:]
-    
     # # Append the first two velocities from the dataset
-    # print(vel_pred[10,0:10,0])
-    # print(all_vel[10,0:10,0])
+    diff_norm = (vel_pred - all_vel).norm(dim=3).mean(dim=(1,2))
+    relative_norm = ((vel_pred - all_vel).norm(dim=3) / all_vel.norm(dim=3)).mean(dim=(1,2))
+
+    print(relative_norm)
 
 
 
