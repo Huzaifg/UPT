@@ -21,8 +21,13 @@ class PathProvider:
         path.mkdir(exist_ok=True, parents=True)
         return path
 
-    def get_stage_output_path(self, stage_name: str, stage_id: str, mkdir=True) -> Path:
-        stage_output_path = self.output_path / stage_name / stage_id
+    def get_stage_output_path(self, stage_name: str, stage_id: str, wandb_folder: str = None, mkdir=True) -> Path:
+        # stage_output_path = self.output_path / stage_name / stage_id
+        if wandb_folder is not None:
+            stage_output_path = self.output_path / stage_name / wandb_folder 
+        else:
+            stage_output_path = self.output_path /  stage_name
+
         return self._mkdir(stage_output_path) if mkdir else stage_output_path
 
     @property
@@ -66,8 +71,8 @@ class PathProvider:
     def primitive_summary_uri(self) -> Path:
         return self.get_primitive_summary_uri(stage_name=self.stage_name, stage_id=self.stage_id)
 
-    def get_stage_checkpoint_path(self, stage_name: str, stage_id: str):
-        return self._mkdir(self.get_stage_output_path(stage_name=stage_name, stage_id=stage_id) / "checkpoints")
+    def get_stage_checkpoint_path(self, stage_name: str, stage_id: str, wandb_folder: str = None) -> Path:
+        return self._mkdir(self.get_stage_output_path(stage_name=stage_name, stage_id=stage_id, wandb_folder=wandb_folder) / "checkpoints")
 
     @property
     def checkpoint_path(self):

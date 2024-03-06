@@ -7,12 +7,14 @@ from utils.factory import create
 
 
 class CheckpointInitializer(InitializerBase):
-    def __init__(self, stage_id, model_name, checkpoint, load_optim, model_info=None, stage_name=None, **kwargs):
+    def __init__(self, stage_id, model_name, checkpoint, load_optim, path_provider, wandb_folder = None ,model_info=None, stage_name=None, **kwargs):
         super().__init__(**kwargs)
+        self.path_provider = path_provider
         self.stage_id = stage_id
         self.model_name = model_name
         self.load_optim = load_optim
         self.model_info = model_info
+        self.wandb_folder = wandb_folder    
         self.stage_name = stage_name or self.path_provider.stage_name
 
         # checkpoint can be a string (e.g. "best_accuracy" for initializing from a model saved by BestModelLogger)
@@ -70,6 +72,7 @@ class CheckpointInitializer(InitializerBase):
         ckpt_folder = self.path_provider.get_stage_checkpoint_path(
             stage_name=self.stage_name,
             stage_id=self.stage_id,
+            wandb_folder = self.wandb_folder
         )
         # find full checkpoint from minimal specification
         if not isinstance(self.checkpoint, str) and not self.checkpoint.is_fully_specified:
