@@ -1,9 +1,4 @@
-from utils.pytorch_cuda_timing import cuda_start_event, cuda_end_event
-from utils.logging_util import add_global_handlers, log_from_all_ranks
 from utils.kappaconfig.util import get_stage_hp
-from train_stage import train_stage
-from distributed.run import run_single_or_multiprocess, run_managed
-from distributed.config import barrier, get_rank, get_local_rank, get_world_size, is_managed
 from datasets import dataset_from_kwargs
 from configs.static_config import StaticConfig
 from providers.dataset_config_provider import DatasetConfigProvider
@@ -13,19 +8,53 @@ from kappadata.wrappers import ModeWrapper
 from providers.path_provider import PathProvider
 from initializers.previous_run_initializer import PreviousRunInitializer
 import kappaprofiler as kp
-import os
 import logging
 import einops
 import torch
-import torch.nn.functional as F
 
 from models import model_from_kwargs
-from models.base.composite_model_base import CompositeModelBase
-from utils.factory import create
 from utils.data_container import DataContainer
 
 from utils.version_check import check_versions
 import time
+
+# Viz stuff
+from pyevtk.hl import pointsToVTK
+from matplotlib import animation
+import matplotlib.pyplot as plt
+import os
+import numpy as np
+
+
+def convert_batch_to_vtk(batch: torch.Tensor, filename: str) -> None:
+    """
+    Convert a batch of positions and velocity to a VTK file for a single timestep
+    Args:
+        batch: Tensor of shape (n_particles, 6)
+        filename: Name of the VTK file
+    """
+    # Extract the positions
+    particles = batch.cpu().detach().numpy()
+    # Create the grid
+    x = np.ascontiguousarray(particles[:, 0])
+    y = np.ascontiguousarray(particles[:, 1])
+    z = np.ascontiguousarray(particles[:, 2])
+    # Separate the velocity components
+    vel_x = np.ascontiguousarray(particles[:, 3])
+    vel_y = np.ascontiguousarray(particles[:, 4])
+    vel_z = np.ascontiguousarray(particles[:, 5])
+    # Organize data for pointsToVTK
+    data = {
+        "Velocity_x": vel_x,
+        "Velocity_y": vel_y,
+        "Velocity_z": vel_z
+    }
+    # Call pointsToVTK with correctly shaped and contiguous data
+    pointsToVTK(filename, x, y, z, data=data)
+    print(f"VTK file written to {filename}")
+
+    
+
 
 
 if __name__ == "__main__":
@@ -116,21 +145,23 @@ if __name__ == "__main__":
     )
 
     # Initilize weights using a previous_run_initializer for each part of model
-    initializer = PreviousRunInitializer(stage_id = "1", model_name = "lagrangian_simformer_model.encoder", checkpoint = "best_model.ekin.valid_rollout.mse", stage_name = "stage1", path_provider = path_provider, wandb_folder = "l6g2r8dz")
+    wandb_folder = "l6g2r8dz"
+    checkpoint = "E50_U3800_S486400"
+    initializer = PreviousRunInitializer(stage_id = "1", model_name = "lagrangian_simformer_model.encoder", checkpoint = checkpoint, stage_name = "stage1", path_provider = path_provider)
 
     initializer.init_weights(model.encoder)
 
-    initializer = PreviousRunInitializer(stage_id = "1", model_name = "lagrangian_simformer_model.decoder", checkpoint = "best_model.ekin.valid_rollout.mse", stage_name = "stage1", path_provider = path_provider, wandb_folder = "l6g2r8dz")
+    initializer = PreviousRunInitializer(stage_id = "1", model_name = "lagrangian_simformer_model.decoder", checkpoint = checkpoint, stage_name = "stage1", path_provider = path_provider)
 
     initializer.init_weights(model.decoder)
 
 
-    initializer = PreviousRunInitializer(stage_id = "1", model_name = "lagrangian_simformer_model.latent", checkpoint = "best_model.ekin.valid_rollout.mse", stage_name = "stage1", path_provider = path_provider, wandb_folder = "l6g2r8dz")
+    initializer = PreviousRunInitializer(stage_id = "1", model_name = "lagrangian_simformer_model.latent", checkpoint = checkpoint, stage_name = "stage1", path_provider = path_provider)
 
     initializer.init_weights(model.latent)
 
 
-    initializer = PreviousRunInitializer(stage_id = "1", model_name = "lagrangian_simformer_model.conditioner_encoder", checkpoint = "best_model.ekin.valid_rollout.mse", stage_name = "stage1", path_provider = path_provider, wandb_folder = "l6g2r8dz")
+    initializer = PreviousRunInitializer(stage_id = "1", model_name = "lagrangian_simformer_model.conditioner_encoder", checkpoint = checkpoint, stage_name = "stage1", path_provider = path_provider)
 
     initializer.init_weights(model.conditioner)
 
@@ -149,7 +180,7 @@ if __name__ == "__main__":
     data_loader = trainer.data_container.get_data_loader(
             main_sampler=main_sampler,
             main_collator=main_collator,
-            batch_size=100,
+            batch_size=1,
             epochs=1,
             updates=None,
             samples=None,
@@ -167,6 +198,7 @@ if __name__ == "__main__":
     # # all positions of the sequence are needed for decoding
     all_pos = ModeWrapper.get_item(mode=trainer.dataset_mode, item="all_pos", batch=batch)
     all_pos = all_pos.to(model.device, non_blocking=True)
+
 
     # # all velocities are needed to compare the predictions
     all_vel = ModeWrapper.get_item(mode=trainer.dataset_mode, item="all_vel", batch=batch)
@@ -216,17 +248,18 @@ if __name__ == "__main__":
             all_vel,
             "bs time n_particles dim -> (bs n_particles) time dim"
         )
-    all_vel = all_vel[:,time_indicies,:]
+    all_vel_target = all_vel[:,time_indicies,:]
+    # all_vel_target = all_vel[:,2:,:]
 
     # Un-normalize the velocities
     vel_pred = trainer.data_container.get_dataset().unnormalize_vel(vel_pred)
     vel_pred = vel_pred
 
-    all_vel = trainer.data_container.get_dataset().unnormalize_vel(all_vel)
-    all_vel = all_vel
+    all_vel_target = trainer.data_container.get_dataset().unnormalize_vel(all_vel_target)
+    all_vel_target = all_vel_target
         # Unbatch
-    all_vel = einops.rearrange(
-        all_vel,
+    all_vel_target = einops.rearrange(
+        all_vel_target,
         "(bs n_particles) time dim -> bs n_particles time dim",
         bs=len(unbatch_select)
     )
@@ -238,15 +271,75 @@ if __name__ == "__main__":
 
     
     # # Append the first two velocities from the dataset
-    diff_norm = (vel_pred - all_vel).norm(dim=3).mean(dim=(1,2))
-    relative_norm = ((vel_pred - all_vel).norm(dim=3) / all_vel.norm(dim=3)).mean(dim=(1,2))
+    diff_norm_mean = (vel_pred - all_vel_target).norm(dim=3).mean(dim=(1,2))
+    relative_norm = ((vel_pred - all_vel_target).norm(dim=3) / all_vel_target.norm(dim=3)).mean(dim=(1,2))
 
     print(relative_norm)
 
 
+    # ============================================================
+    # Write batch to vtk
+    # ============================================================
+    
+    # Ground truth
+    all_pos = einops.rearrange(
+        all_pos,
+        "bs time n_particles dim -> (bs n_particles) time dim"
+    )
+
+    # unnormalize all_vel as well
+    all_vel = trainer.data_container.get_dataset().unnormalize_vel(all_vel)
+    all_vel = all_vel
+    
+    # Append all vel last 3 columns to all_pos
+    batch_ground_truth = torch.cat((all_pos[:,:60,:], all_vel), dim=2)
+
+    # Loop over timestep axis and write to vtk
+    base_vtk = "./vtk_files/"
+    # Ensure base_vtk exists or create it
+    if not os.path.exists(base_vtk):
+        os.makedirs(base_vtk)
+
+    for i in range(batch_ground_truth.shape[1]):
+        convert_batch_to_vtk(batch_ground_truth[:,i,:], base_vtk + f"ground_truth_{i}")
 
     
+    
 
+    # Velocity prediction
+    # Remove all_pos based on time_indicies
+    time_indicies = torch.tensor([0, 1, 10, 11, 20, 21, 30, 31, 40, 41, 50, 51]) # Add the input data for better viz
+    all_pos = all_pos[:,time_indicies,:]
+
+
+
+    vel_pred = einops.rearrange(
+        vel_pred,
+        "bs n_particles time dim -> (bs n_particles) time dim"
+    )
+
+    # Append in the start to vel_pred all_vel first 2 vels
+    all_vel_0 = all_vel[:,0,:]
+    all_vel_1 = all_vel[:,1,:]
+
+    all_vel_0_expanded = all_vel_0.unsqueeze(1)
+    all_vel_1_expanded = all_vel_1.unsqueeze(1)
+
+    # Put all_vel_0 and all_vel_1 to make vel_pred from [8000,10,3] to [8000,12,3]
+    vel_pred = torch.cat((all_vel_0_expanded, all_vel_1_expanded, vel_pred), dim=1)
+
+
+    print(all_pos.shape)
+    print(vel_pred.shape)
+
+    # Append vel_pred last 3 columns to all_pos
+    batch_pred = torch.cat((all_pos, vel_pred), dim=2)
+
+    # Loop over timestep axis and write to vtk
+    base_vtk = "./vtk_files/"
+    
+    for i in range(batch_pred.shape[1]):
+        convert_batch_to_vtk(batch_pred[:,i,:], base_vtk + f"pred_{i}")
 
 
 
