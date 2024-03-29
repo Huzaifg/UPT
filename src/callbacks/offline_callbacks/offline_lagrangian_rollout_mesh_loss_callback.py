@@ -71,7 +71,6 @@ class OfflineLagrangianRolloutMeshLossCallback(PeriodicCallback):
         # decoder predicts all points
         unbatch_idx = ctx["unbatch_idx"].to(model.device, non_blocking=True)
         unbatch_select = ctx["unbatch_select"].to(model.device, non_blocking=True)
-
         # rollout
         with trainer.autocast_context:
             x_hat, all_vels = model.rollout(x=x,
