@@ -1,29 +1,41 @@
 wandb: cvsim
-name: tgv2d
-stage_name: stage1
+name: tgv3d
+stage_name: trial3SuperNodes
+group: Step
 vars:
-  lr: 1.0e-3
+  lr: 2.0e-3
   batch_size: 128
   max_batch_size: 64
-  epochs: 50
+  epochs: 100
 
   dataset:
     kind: lagrangian_dataset
-    name: tgv2d
+    name: tgv3d
     n_input_timesteps: 3
     n_pushforward_timesteps: 9
     graph_mode: radius_graph_with_supernodes
-    radius_graph_r: 0.1
+    radius_graph_r: 0.6
     radius_graph_max_num_neighbors: 4
-    n_supernodes: 256
+    n_supernodes: 1024
 
   optim:
     kind: adamw
     lr: ${vars.lr}
     weight_decay: 0.05
     schedule:
-      template: ${yaml:schedules/wupcos_epoch}
-      template.vars.end_epoch: 10
+    - schedule:
+        kind: linear_increasing_schedule
+        exclude_first: true
+        exclude_last: false
+      end_epoch: 25
+    - schedule:
+        kind: constant_schedule
+        value: 0.001
+      end_epoch: 50
+    - schedule:
+        kind: cosine_decreasing_schedule
+        exclude_last: true
+        end_value: 0.00001
 
 datasets:
   train:
@@ -36,7 +48,7 @@ datasets:
     radius_graph_r: ${vars.dataset.radius_graph_r}
     radius_graph_max_num_neighbors: ${vars.dataset.radius_graph_max_num_neighbors}
     n_supernodes: ${vars.dataset.n_supernodes}
-    num_points_range: [ 1250, 2500 ]
+    num_points_range: [4000, 8000]
     collators:
       - kind: lagrangian_simformer_collator
   valid_rollout:
@@ -110,9 +122,18 @@ trainer:
       batch_size: 128
       rollout_kwargs:
         save_rollout: true
+    - kind: offline_loss_callback
+      every_n_epochs: 1
+      dataset_key: train
+      batch_size: 128
     - kind: offline_lagrangian_large_t_rollout_mesh_loss_callback
       every_n_epochs: 1
       dataset_key: valid_rollout
       batch_size: 128
       rollout_kwargs:
         save_rollout: false
+    - kind: best_checkpoint_callback
+      every_n_epochs: 1
+      metric_key: ekin/valid_rollout/vel_error_relative
+    - kind: checkpoint_callback
+      every_n_epochs: 2

@@ -36,7 +36,7 @@ datasets:
     radius_graph_r: ${vars.dataset.radius_graph_r}
     radius_graph_max_num_neighbors: ${vars.dataset.radius_graph_max_num_neighbors}
     n_supernodes: ${vars.dataset.n_supernodes}
-    num_points_range: [4000, 8000]
+    num_points_range: [ 4000, 8000 ]
     collators:
       - kind: lagrangian_simformer_collator
   valid_rollout:
@@ -116,13 +116,3 @@ trainer:
       batch_size: 128
       rollout_kwargs:
         save_rollout: false
-    - kind: offline_lagrangian_large_t_rollout_speed_callback
-      every_n_epochs: 1
-      dataset_key: test_rollout
-      batch_size: 128
-      rollout_kwargs:
-        save_rollout: false
-    - kind: best_checkpoint_callback
-      every_n_epochs: 1
-      metric_key: ekin/valid_rollout/mse
-    - kind: checkpoint_callback

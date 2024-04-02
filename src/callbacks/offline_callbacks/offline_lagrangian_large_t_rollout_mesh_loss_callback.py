@@ -97,6 +97,14 @@ class OfflineLagrangianLargeTRolloutMeshLossCallback(PeriodicCallback):
             all_vel,
             "bs time n_particles dim -> (bs n_particles) time dim"
         )
+
+        n_pushforward_timesteps = self.data_container.get_dataset().n_pushforward_timesteps
+        n_vels_traj = all_pos.shape[1] - 1
+
+        large_t = n_pushforward_timesteps + 1
+        time_indicies = [(i, i+1) for i in range(large_t, n_vels_traj-2, large_t)]
+        self.time_indicies = torch.tensor([item for sublist in time_indicies for item in sublist])
+
         all_vel_target = all_vel[:,self.time_indicies,:]
         dt = self.data_container.get_dataset().metadata["dt"] * self.data_container.get_dataset().metadata["write_every"]
         dx = self.data_container.get_dataset().metadata["dx"]

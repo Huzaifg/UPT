@@ -1,0 +1,5 @@
+kind: linear_decreasing_schedule
+exclude_first: true
+excule_last: true
+end_epoch: 50
+end_value: 0.00001

@@ -437,7 +437,6 @@ class LagrangianSimformerModel(CompositeModelBase):
                 break
             curr_pos = all_pos[:,pos_idx,:,:]
             # New timestep embedding
-            
             if self.conditioner is not None and not const_timestep:
                 timestep = timestep + large_t
                 timestep_embed = self.conditioner(timestep=timestep, velocity=torch.zeros_like(timestep))

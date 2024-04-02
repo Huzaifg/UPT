@@ -1,6 +1,7 @@
 wandb: cvsim
 name: tgv3d
-stage_name: stage1
+stage_name: test1
+group: testing
 vars:
   lr: 1.0e-3
   batch_size: 128
